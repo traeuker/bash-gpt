@@ -1,39 +1,53 @@
 import subprocess
 import sys
 
-from inference import get_command
+from inference import get_command, extract_command
+
+def is_exit_command(command):
+    return command.lower() in ["exit", "quit", "e", "q", "x"]
 
 def main():
+    verbose = False
     while True:
-        # Prompt user for input
         instruction = input("Enter command (or 'exit' to quit): ")
-        if instruction.lower() in ['exit', 'quit', 'e']:
+
+        if is_exit_command(instruction):
             break
+
+        # Check for verbose flag
+        if '-v' in instruction or '--verbose' in instruction:
+            verbose = True
+            instruction = instruction.replace('-v', '').replace('--verbose', '').strip()
+
         try:
-            notes = ''
-            # keep looping over prompt until you find solution that agrees with user
+            notes = ""
             while True:
-                # get command by 
-                cmd = get_command(instruction, notes)
+                cmd_output = get_command(instruction, notes, verbose=verbose)
+                extracted_cmd, extracted_notes = extract_command(cmd_output)
 
-                # ask do you want to run this command?
-                answer = input(f"Do you want to run this command: '{cmd}'\n('y' or add additional comments): ")
+                if not extracted_cmd:
+                    answer = input(f"Note: '{extracted_notes}'\n(Add additional comments or 'q' to quit): ")
+                else:
+                    answer = input(f"Do you want to run this command: '{extracted_cmd}'\n('y' or add additional comments or 'q' to quit): ")
 
-                if answer.lower() in ['y', 'yes']:
+                if is_exit_command(answer):
+                    return  # Exits the main function, thereby stopping the program
+
+                if answer.lower() in ["y", "yes"]:
                     break
 
-                notes += f"The command {cmd} did not work.\n User said: {answer}\n"
-            # Execute the command
-            print(cmd)
-            result = subprocess.run(cmd.split(), capture_output=True, text=True, check=True)
-            # Print the output
+
+                notes += f"The command {extracted_cmd} is not what the user was looking for.\n User commented: {answer}\n"
+
+            print(extracted_cmd)
+            result = subprocess.run(extracted_cmd.split(), capture_output=True, text=True, check=True)
             print(result.stdout)
             print(result.stderr, file=sys.stderr)
+
         except subprocess.CalledProcessError as e:
-            # Print error message if the command execution fails
             print(f"Error: {e}", file=sys.stderr)
+
         except Exception as e:
-            # General error handling
             print(f"An error occurred: {e}", file=sys.stderr)
 
 if __name__ == "__main__":
